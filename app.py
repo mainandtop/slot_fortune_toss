@@ -314,7 +314,12 @@ def build_final_fortune(base_fortune: str, bonuses: dict, current_grade: str, ne
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # 화면을 그리는 대신, 서버가 살아있다는 신호만 보냅니다.
+    return jsonify({
+        "status": "online",
+        "message": "레트로 도사 API 서버가 정상 동작 중입니다!",
+        "version": "1.0.0"
+    })
 
 @app.route('/get_fortune', methods=['POST'])
 def get_fortune():
