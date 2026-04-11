@@ -5,6 +5,7 @@ from google.genai import types
 from datetime import datetime
 import time
 import os
+import requests
 from dotenv import load_dotenv
 import json
 import hashlib
@@ -16,6 +17,17 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+def get_toss_cert():
+    cert_path = '/tmp/toss_cert.pem'
+    key_path = '/tmp/toss_key.pem'
+    
+    with open(cert_path, 'w') as f:
+        f.write(os.environ.get('TOSS_CERT', ''))
+    with open(key_path, 'w') as f:
+        f.write(os.environ.get('TOSS_KEY', ''))
+        
+    return (cert_path, key_path)
 
 ip_request_counts = defaultdict(lambda: {"count": 0, "date": ""})
 
@@ -418,6 +430,21 @@ def get_fortune():
             "grade": "에러",
             "status": "신당 점검 중"
         }), 500
+
+
+@app.route('/toss-api-call')
+def call_toss():
+    cert = get_toss_cert()
+    # 실제 토스에서 요구하는 API 주소 (문서 확인 후 변경)
+    url = "https://apps-in-toss-api.toss.im/v1/user-identity" 
+    
+    try:
+        # cert 인자에 아까 만든 파일 경로를 넣어 신분증을 제시합니다.
+        response = requests.post(url, cert=cert, json={"some": "data"})
+        return response.json()
+    except Exception as e:
+        # 에러 발생 시 도사님께 보고합니다.
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/story.html')
 def story():
