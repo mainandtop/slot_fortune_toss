@@ -1,0 +1,89 @@
+/* 헤더 및 사이드 메뉴 */
+.mobile-header { width: 100%; height: 60px; background: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; position: sticky; top: 0; z-index: 1100; border-bottom: 1px solid #222; }
+.header-center { flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+.logo-link { display: flex; align-items: center; justify-content: center; height: 100%; max-width: 200px; text-decoration: none; }
+.logo-img { height: 82px; max-height: 82px; width: auto; object-fit: contain; }
+.header-left, .header-right { width: 50px; display: flex; align-items: center; }
+.header-left { justify-content: flex-start; }
+.header-right { justify-content: flex-end; }
+.icon-btn { background: none; border: none; color: #fff; font-size: 1.4rem; cursor: pointer; padding: 5px; }
+
+.side-menu { position: fixed; top: 0; left: -280px; width: 280px; height: 100%; background: #1a1a1a; z-index: 2000; transition: 0.3s ease; box-shadow: 5px 0 15px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+.side-menu.active { left: 0; }
+.menu-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+.menu-title { font-weight: bold; color: var(--gold); font-size: 1.1rem; }
+.close-btn { background: none; border: none; color: #fff; font-size: 2rem; cursor: pointer; }
+.menu-links { display: flex; flex-direction: column; padding: 10px 0; }
+.menu-links a { padding: 15px 25px; color: #ddd; text-decoration: none; font-size: 1rem; display: flex; align-items: center; gap: 15px; }
+.menu-links a:hover { background: #333; color: var(--gold); }
+.menu-divider { height: 1px; background: #333; margin: 10px 0; }
+.menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; z-index: 1500; }
+.menu-overlay.active { display: block; }
+
+/* 메인 컨테이너 */
+.container { width: 90%; max-width: 420px; margin: 10px auto; padding: 20px; background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(10px); border: 2px solid var(--gold); border-radius: 25px; box-shadow: 0 0 20px rgba(255, 215, 0, 0.3); }
+.fever-mode { animation: fever-glow 0.5s infinite; background: rgba(255, 0, 255, 0.1); }
+@keyframes fever-glow { 0% { border-color: #ff00ff; box-shadow: 0 0 20px #ff00ff; } 50% { border-color: #00ffff; box-shadow: 0 0 30px #00ffff; } 100% { border-color: #ff00ff; box-shadow: 0 0 20px #ff00ff; } }
+
+/* 슬롯머신 그리드 */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #000; padding: 15px; border-radius: 15px; margin: 20px 0; border: 2px inset var(--gold); }
+.reel { height: 85px; background: #fff; color: #000; font-size: 45px; line-height: 85px; border-radius: 10px; font-weight: bold; }
+.win-line { border: 4px solid var(--red); box-shadow: 0 0 15px var(--red); animation: blink 0.3s infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* 폼 요소 및 버튼 */
+input, textarea, select { background: #333; border: 1px solid var(--gold); color: white; padding: 15px; border-radius: 10px; margin: 8px 0; width: 100%; font-size: 16px; outline: none; font-family: inherit; }
+select { color: gray; }
+.btn { padding: 18px; font-size: 20px; font-weight: bold; background: linear-gradient(to bottom, #ff4d4d, #990000); border: 2px solid #fff; border-radius: 50px; color: white; cursor: pointer; width: 100%; margin-top: 15px; }
+.buy-btn { background: #222; color: var(--neon); border: 1px solid var(--neon); padding: 12px; border-radius: 12px; font-weight: bold; width: 100%; margin-top: 12px; cursor: pointer; transition: 0.3s; }
+.buy-btn:disabled { border-color: #444; color: #666; cursor: default; }
+.gender-btn { padding: 12px 30px; cursor: pointer; background: #333; color: white; border: 1px solid var(--gold); border-radius: 10px; font-weight: bold; flex: 1; }
+.gender-btn.active { background: var(--gold); color: #000; }
+.highlight { color: var(--neon); font-size: 2.2em; text-shadow: 0 0 20px var(--neon); transform: scale(1.2); display: inline-block; transition: all 0.2s; }
+
+/* 미디어 씬 */
+.scene-media { width: 100%; margin-bottom: 18px; border-radius: 20px; overflow: hidden; border: 2px solid var(--gold); background: #111; position: relative; aspect-ratio: 8 / 3; }
+.scene-media img, .scene-media video { width: 100%; height: 100%; object-fit: cover; display: none; }
+.scene-media img.active, .scene-media video.active { display: block; }
+
+/* 모달 및 결과창 */
+.modal-bg { display: flex; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
+.modal-content { background-color: #1a1a1a; color: #fff; padding: 20px; border: 2px solid #ffd700; width: 80%; max-width: 400px; text-align: center; border-radius: 10px; position: relative; }
+.manual-text { text-align: left; margin: 20px 0; font-size: 14px; line-height: 1.6; }
+.close-btn-modal { position: absolute; top: 10px; right: 20px; font-size: 30px; color: #ffd700; cursor: pointer; background: none; border: none;}
+.ok-btn { background: #ffd700; color:#000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; border-radius: 5px;}
+
+.fortune-card-capture { background: #000; padding: 25px; border-radius: 20px; position: relative; }
+.fortune-card-footer { margin-top: 18px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.15); font-size: 12px; color: #aaa; text-align: center; line-height: 1.6; }
+.result-action-row { display: flex; gap: 10px; margin-top: 18px; }
+.action-btn { flex: 1; padding: 14px; font-size: 15px; font-weight: bold; border-radius: 12px; border: 1px solid var(--gold); cursor: pointer; transition: 0.2s ease; }
+.save-btn { background: linear-gradient(to bottom, #2b2b2b, #111); color: var(--gold); }
+
+/* 가위바위보 애니메이션 */
+@keyframes rps-win-pop { 0% { transform: scale(1); box-shadow: 0 0 0 rgba(0,255,204,0); } 40% { transform: scale(1.18); box-shadow: 0 0 30px rgba(0,255,204,0.9); } 100% { transform: scale(1); box-shadow: 0 0 18px rgba(0,255,204,0.45); } }
+@keyframes rps-lose-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { transform: translateX(-8px); } 80% { transform: translateX(8px); } }
+@keyframes rps-draw-fade { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: 0.75; } }
+@keyframes text-pop { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+.rps-win-effect { animation: rps-win-pop 0.45s ease; }
+.rps-lose-effect { animation: rps-lose-shake 0.45s ease; }
+.rps-draw-effect { animation: rps-draw-fade 0.35s ease; }
+.rps-text-pop { display: inline-block; animation: text-pop 0.35s ease; }
+
+/* 우주 엔딩 이펙트 */
+.universe-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, rgba(75, 0, 130, 0.4) 0%, rgba(0, 0, 0, 1) 90%); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 1.5s ease-in; pointer-events: all; }
+.universe-text { font-size: 2.5rem; font-weight: 900; color: #fff; text-align: center; text-shadow: 0 0 20px #ff00ff, 0 0 40px #00ffff; animation: universe-pulse 1.5s infinite alternate; }
+@keyframes universe-pulse { from { transform: scale(1); text-shadow: 0 0 20px #ff00ff; } to { transform: scale(1.1); text-shadow: 0 0 40px #00ffff, 0 0 60px #fff; } }
+.particle { position: absolute; width: 4px; height: 4px; border-radius: 50%; pointer-events: none; z-index: 10001; }
+
+#collect-btn { background: linear-gradient(135.0deg, #ffd700, #ff8c00); color: #000; border: none; padding: 15px 35px; border-radius: 50px; cursor: pointer; font-weight: 900; font-size: 18px; margin-top: 20px; box-shadow: 0 0 15px rgba(255, 215, 0, 0.6); animation: pulse-gold 1.5s infinite; width: 80%; max-width: 300px; }
+@keyframes pulse-gold { 0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); } 50% { transform: scale(1.03); box-shadow: 0 0 25px rgba(255, 215, 0, 0.8); } }
+
+/* 정보 및 푸터 */
+.grade-item { width: 100%; border-left: 3px solid #555; padding: 8px 12px; text-align: center; background: rgba(255,255,255,0.02); margin-bottom: 4px; }
+.footer { background-color: #1a1a1a; color: #888; padding: 40px 20px; border-top: 1px solid #333; margin-top: 50px; text-align: center; }
+.footer-container { max-width: 800px; margin: 0 auto; }
+.footer-content h3 { color: #ffd700; font-size: 1.2rem; margin-bottom: 15px; }
+.footer-links a { color: #bbb; text-decoration: none; font-size: 0.85rem; }
+.footer-links a:hover { color: #fff; }
+.divider { margin: 0 10px; color: #444; }
+.footer-bottom { font-size: 0.8rem; border-top: 1px solid #2a2a2a; padding-top: 20px; margin-top: 20px;}
