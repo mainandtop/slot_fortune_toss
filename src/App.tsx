@@ -327,7 +327,7 @@ if (prospectiveTotal >= 150000 && totalScore < 150000) {
     setView('loading');
     const finalScore = scoreToUse !== undefined ? scoreToUse : totalScore;
     try {
-      const response = await fetch('http://localhost:8080/get_fortune', {
+      const response = await fetch('https://slotfortunetoss-production.up.railway.app/get_fortune', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
