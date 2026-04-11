@@ -314,7 +314,7 @@ def build_final_fortune(base_fortune: str, bonuses: dict, current_grade: str, ne
 
 @app.route('/')
 def index():
-    return "Retro Dosa API Server is Running!"
+    return render_template('index.html')
 
 @app.route('/get_fortune', methods=['POST'])
 def get_fortune():
