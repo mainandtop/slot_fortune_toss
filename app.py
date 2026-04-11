@@ -336,17 +336,27 @@ def index():
 @app.route('/get_fortune', methods=['POST'])
 def get_fortune():
     global ip_request_counts
-    # [보안 추가] 사용자의 실제 IP 주소 추출
+    
+    # 🌟 [개선] 보따리(JSON)를 먼저 풀어 익명 키를 찾습니다.
+    data = request.get_json(silent=True) or {}
+    anon_key = data.get('anonymous_key')
+    
+    # 🌟 [개선] 사용자의 실제 IP 추출 (예비용)
     user_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0]
+    
+    # 🌟 [핵심] 익명 키가 있으면 그걸 신분증으로 쓰고, 없으면 IP를 씁니다.
+    user_id = anon_key if anon_key else user_ip
+    
     today_key = datetime.now().strftime("%Y-%m-%d")
     
-    # 해당 IP의 오늘 기록 확인 및 초기화
-    user_record = ip_request_counts[user_ip]
+    # 해당 사용자(user_id)의 오늘 기록 확인 및 초기화
+    # (변수명은 ip_request_counts지만 실제로는 익명 키를 우선 담게 되오)
+    user_record = ip_request_counts[user_id]
     if user_record["date"] != today_key:
         user_record["count"] = 0
         user_record["date"] = today_key
 
-    #10회 초과 시 Gemini 호출 전에 즉시 반환 (비용 방어)
+    # 10회 초과 시 즉시 반환 (익명 키 기준이라 아주 정확하오!)
     if user_record["count"] >= 10:
         return jsonify({
             "fortune": "🏮 도사님의 경고: '이미 하루의 천기를 똥꼬까지 다 보았네! 내일 다시 오시게.'",
@@ -355,17 +365,16 @@ def get_fortune():
         }), 429
     
     try:
-        data = request.get_json(silent=True) or {}
-        name = data.get('name', '익명')[:10]             # 최대 10자
-        birth = data.get('birth', '알 수 없음')[:8]      # 최대 8자 (숫자 8자리)
+        # 이미 위에서 data를 가져왔으니 다시 가져올 필요 없소.
+        name = data.get('name', '익명')[:10]
+        birth = data.get('birth', '알 수 없음')[:8]
         birth_time = data.get('birth_time', '모름')[:20]
         gender = data.get('gender', '미정')[:2]
         score = int(data.get('total_score', 0))
-        user_question = data.get('question', '오늘의 전반적인 운세')[:80] # 최대 80자
+        user_question = data.get('question', '오늘의 전반적인 운세')[:80]
 
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧧 {name}({gender}/{birth}) | 점수: {score} | 고민: {user_question}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧧 {name}({gender}/{birth}) | 점수: {score} | 고민: {user_question} | ID: {user_id[:10]}...")
 
-        today_key = datetime.now().strftime("%Y-%m-%d")
         today_display = datetime.now().strftime("%Y년 %m월 %d일")
 
         grade_info = get_grade_info(score)
@@ -415,6 +424,7 @@ def get_fortune():
             next_grade_info=next_grade_info
         )
         
+        # 🌟 마지막에 카운트를 올립니다.
         user_record["count"] += 1
 
         return jsonify({
