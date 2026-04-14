@@ -12,6 +12,9 @@ import hashlib
 import traceback
 from pathlib import Path
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 
 load_dotenv()
 
@@ -227,7 +230,9 @@ def get_fortune():
     user_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0]
     user_id = anon_key if anon_key else user_ip
     
-    today_key = datetime.now().strftime("%Y-%m-%d")
+    now_kst = datetime.now(KST)
+    today_key = now_kst.strftime("%Y-%m-%d")      # 캐시 및 횟수 제한용 (2026-04-15)
+    today_display = now_kst.strftime("%Y년 %m월 %d일") # 프롬프트 표시용
     
     user_record = ip_request_counts[user_id]
     if user_record["date"] != today_key:
@@ -236,7 +241,7 @@ def get_fortune():
 
     if user_record["count"] >= 10:
         return jsonify({
-            "fortune": "🏮 도사님의 경고: '이미 하루의 천기를 똥꼬까지 다 보았네! 내일 다시 오시게.'",
+            "fortune": "🏮 도사님의 경고: '이미 하루의 천기를 끝까지 다 보았네! 내일 다시 오시게.'",
             "grade": "접근 제한", 
             "status": "욕심은 금물이오"
         }), 429
@@ -249,9 +254,7 @@ def get_fortune():
         score = int(data.get('total_score', 0))
         user_question = data.get('question', '오늘의 전반적인 운세')[:80]
 
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧧 {name} | 점수: {score} | 고민: {user_question} | ID: {user_id[:10]}...")
-
-        today_display = datetime.now().strftime("%Y년 %m월 %d일")
+        print(f"[{now_kst.strftime('%H:%M:%S')}] 🧧 {name} | 점수: {score} | 고민: {user_question} | ID: {user_id[:10]}...")
 
         grade_info = get_grade_info(score)
         grade = grade_info["grade"]
