@@ -1,13 +1,14 @@
 {
   "name": "my-toss-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.3",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "vite --host",
+    "build": "vite build && ait build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "ait deploy --api-key ts_h0vimA31XgnB4Juf-sn7KuL5K2S6eOam-FwXdS_MUco"
   },
   "dependencies": {
     "@toss/tds-mobile-ait": "^2.3.0",
