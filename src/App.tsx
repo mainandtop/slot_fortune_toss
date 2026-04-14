@@ -202,12 +202,12 @@ export default function App() {
   };
 
   const buySpin = () => {
-    if (totalScore >= 1000) {
-      setTotalScore(prev => prev - 1000); 
+    if (totalScore >= 500) {
+      setTotalScore(prev => prev - 500); 
       setMaxSpins(prev => prev + 1);     
       playSound(coinSndRef.current);
     } else {
-      setSysAlert({ msg: "복채가 부족하구려! (1,000P 필요)" });
+      setSysAlert({ msg: "복채가 부족하구려! (500P 필요)" });
     }
   };
 
@@ -215,9 +215,9 @@ export default function App() {
     if (isInitializing || isSpinning || isSpinningRef.current) return;
 
     if (spinCount >= maxSpins) {
-      if (totalScore >= 1000) {
+      if (totalScore >= 500) {
         setSysConfirm({
-          msg: `모든 기회를 소모했네!\n\n[확인] 기회 1회 추가 (1,000P 차감)\n[취소] 지금 바로 운세 결과 보기`,
+          msg: `모든 기회를 소모했네!\n\n[확인] 기회 1회 추가 (500P 차감)\n[취소] 지금 바로 운세 결과 보기`,
           // ✅ [버그 수정 3] buySpin(true)에 남아있던 true 파라미터 삭제
           onOk: () => { buySpin(); },
           onCancel: () => { triggerGetFortune(); }
@@ -568,12 +568,12 @@ export default function App() {
             <button 
                className="buy-btn" 
                onClick={() => buySpin()}
-               disabled={totalScore < 1000}
-               style={{ opacity: totalScore < 1000 ? 0.5 : 1 }}
+               disabled={totalScore < 500}
+               style={{ opacity: totalScore < 500 ? 0.5 : 1 }}
              >
                {totalScore >= 1000 
-               ? `➕ 기회 1회 추가 (1,000P)` 
-               : "🚫 기회 1회 추가 (1,000P 필요)"}
+               ? `➕ 기회 1회 추가 (1000P)` 
+               : "🚫 기회 1회 추가 (100P 필요)"}
              </button>
           </div>
         )}
