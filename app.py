@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request, send_from_directory
-from flask_cors import CORS  # 1. 이 줄을 추가
+from flask_cors import CORS
 from google import genai
 from google.genai import types
 from datetime import datetime
@@ -21,13 +21,16 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 def get_toss_cert():
     cert_path = '/tmp/toss_cert.pem'
     key_path = '/tmp/toss_key.pem'
-    
-    with open(cert_path, 'w') as f:
-        f.write(os.environ.get('TOSS_CERT', ''))
-    with open(key_path, 'w') as f:
-        f.write(os.environ.get('TOSS_KEY', ''))
+
+    if not os.path.exists(cert_path) or not os.path.exists(key_path):
+        with open(cert_path, 'w') as f:
+            f.write(os.environ.get('TOSS_CERT', ''))
+        with open(key_path, 'w') as f:
+            f.write(os.environ.get('TOSS_KEY', ''))
         
     return (cert_path, key_path)
+
+TOSS_CERTS = get_toss_cert() # 🌟 수정: 함수 이름과 맞춤
 
 ip_request_counts = defaultdict(lambda: {"count": 0, "date": ""})
 
@@ -38,36 +41,12 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# models.list()로 지원 모델 전체를 받아와 출력
-for m in client.models.list():
-    # 텍스트 생성(generateContent) 가능한 모델만 필터링
-    if "generateContent" in m.supported_actions:
-        print(m.name)
-        print("  → 설명:", m.display_name)
-
 SCORES = {
-    "💎": 5000,
-    "👑": 3500,
-    "💰": 2000,
-    "7️⃣": 1000,
-    "🍒": 500,
-    "🍋": 300
+    "💎": 5000, "👑": 3500, "💰": 2000, 
+    "7️⃣": 1000, "🍒": 500, "🍋": 300
 }
 
 CACHE_FILE = Path("fortune_cache.json")
-
-GRADE_ORDER = [
-    "🌑 수행자",
-    "👣 평민",
-    "🏹 숙련자",
-    "📜 현자",
-    "⚔️ 대장군",
-    "💎 보석왕",
-    "👑 제왕",
-    "🌕 광명성",
-    "☀️ 태양신",
-    "🌌 우주신"
-]
 
 safety_settings = [
     types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
@@ -75,7 +54,6 @@ safety_settings = [
     types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
     types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
 ]
-
 
 def load_cache():
     if CACHE_FILE.exists():
@@ -86,247 +64,156 @@ def load_cache():
             return {}
     return {}
 
-
 def save_cache(cache):
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
-
 fortune_cache = load_cache()
-
 
 def get_grade_info(score: int):
     if score >= 150000:
-        return {
-            "grade": "🌌 우주신",
-            "status": "15만 점 돌파! 우주의 주인이 되셨구려!",
-            "secrets": 5,
-            "next_grade_info": None
-        }
+        return {"grade": "🌌 우주신", "status": "15만 점 돌파! 우주의 주인이 되셨구려!", "secrets": 4, "next_grade_info": None}
     elif score >= 100000:
-        return {
-            "grade": "☀️ 태양신",
-            "status": "온 세상을 밝히는 강렬한 태양의 기운!",
-            "secrets": 3,
-            "next_grade_info": "🌌 우주신"
-        }
+        return {"grade": "☀️ 태양신", "status": "온 세상을 밝히는 강렬한 태양의 기운!", "secrets": 3, "next_grade_info": "🌌 우주신"}
     elif score >= 80000:
-        return {
-            "grade": "🌕 광명성",
-            "status": "어둠 속에서도 빛을 발하는 비범한 운명!",
-            "secrets": 2,
-            "next_grade_info": "☀️ 태양신"
-        }
+        return {"grade": "🌕 광명성", "status": "어둠 속에서도 빛을 발하는 비범한 운명!", "secrets": 2, "next_grade_info": "☀️ 태양신"}
     elif score >= 70000:
-        return {
-            "grade": "👑 제왕",
-            "status": "만인을 발아래 두는 제왕의 격이로다.",
-            "secrets": 2,
-            "next_grade_info": "🌕 광명성"
-        }
+        return {"grade": "👑 제왕", "status": "만인을 발아래 두는 제왕의 격이로다.", "secrets": 2, "next_grade_info": "🌕 광명성"}
     elif score >= 60000:
-        return {
-            "grade": "💎 보석왕",
-            "status": "금은보화가 창고에 쌓이는 형국이로다.",
-            "secrets": 2,
-            "next_grade_info": "👑 제왕"
-        }
+        return {"grade": "💎 보석왕", "status": "금은보화가 창고에 쌓이는 형국이로다.", "secrets": 2, "next_grade_info": "👑 제왕"}
     elif score >= 40000:
-        return {
-            "grade": "⚔️ 대장군",
-            "status": "용맹한 기운이 하늘을 찌르는구나!",
-            "secrets": 1,
-            "next_grade_info": "💎 보석왕"
-        }
+        return {"grade": "⚔️ 대장군", "status": "용맹한 기운이 하늘을 찌르는구나!", "secrets": 1, "next_grade_info": "💎 보석왕"}
     elif score >= 30000:
-        return {
-            "grade": "📜 현자",
-            "status": "지혜가 샘솟고 귀인이 길을 안내하리라.",
-            "secrets": 1,
-            "next_grade_info": "⚔️ 대장군"
-        }
+        return {"grade": "📜 현자", "status": "지혜가 샘솟고 귀인이 길을 안내하리라.", "secrets": 1, "next_grade_info": "⚔️ 대장군"}
     elif score >= 20000:
-        return {
-            "grade": "🏹 숙련자",
-            "status": "기운이 무르익었으니 조금만 더 힘내시오.",
-            "secrets": 1,
-            "next_grade_info": "📜 현자"
-        }
+        return {"grade": "🏹 숙련자", "status": "기운이 무르익었으니 조금만 더 힘내시오.", "secrets": 1, "next_grade_info": "📜 현자"}
     elif score >= 10000:
-        return {
-            "grade": "👣 평민",
-            "status": "성실함이 복이 되어 돌아오는 날이로다.",
-            "secrets": 0,
-            "next_grade_info": "🏹 숙련자"
-        }
+        return {"grade": "👣 평민", "status": "성실함이 복이 되어 돌아오는 날이로다.", "secrets": 0, "next_grade_info": "🏹 숙련자"}
     else:
-        return {
-            "grade": "🌑 수행자",
-            "status": "지금은 씨앗을 심는 시기니 인내하거라.",
-            "secrets": 0,
-            "next_grade_info": "👣 평민"
-        }
+        return {"grade": "🌑 수행자", "status": "지금은 씨앗을 심는 시기니 인내하거라.", "secrets": 0, "next_grade_info": "👣 평민"}
 
-
-def make_daily_fortune_key(name, birth, birth_time, gender, question, today_key):
-    raw = f"{today_key}|{name.strip()}|{birth.strip()}|{birth_time.strip()}|{gender.strip()}|{question.strip()}"
+def make_daily_fortune_key(name, birth, birth_time, gender, question, grade, today_key):
+    raw = f"{today_key}|{name.strip()}|{birth.strip()}|{birth_time.strip()}|{gender.strip()}|{question.strip()}|{grade}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-
 def call_gemini(prompt: str) -> str:
-    import traceback
     max_retries = 2
-
     for i in range(max_retries):
         try:
             response = client.models.generate_content(
                 model="models/gemini-2.5-flash-lite",
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    safety_settings=safety_settings
-                )
+                config=types.GenerateContentConfig(safety_settings=safety_settings)
             )
-
-            # 1차: 최신 SDK 대응
             if hasattr(response, "text") and response.text:
                 return response.text.strip()
-
-            # 2차: 구버전/대체 구조 대응
             try:
                 return response.candidates[0].content.parts[0].text.strip()
             except:
                 pass
-
         except Exception as e:
             print(f"Retry {i + 1} failed:")
             traceback.print_exc()
-
             if i < max_retries - 1:
                 time.sleep(2)
-
     raise RuntimeError("Gemini 응답 생성 실패")
 
-
-def generate_base_fortune(name, birth, birth_time, gender, question, today_display):
+# 🌟 수정: 프롬프트 말투 일관성 강화, 비책 개수 명확화, 섹션 해금 조건 조정
+def generate_full_fortune(name, birth, birth_time, gender, question, grade, secrets, today_display, next_grade_info):
     prompt = f"""
-너는 수천 년간 내려온 '사주 명리학'의 빅데이터를 완벽하게 숙지하고 있는 AI 레트로 도사다.
+너는 수천 년간 사주 명리학과 인간 심리를 통달한 레트로 도사다.
 오늘은 {today_display}.
 
-손님 정보:
-- 이름: {name}
-- 생년월일: {birth}
-- 태어난 시간: {birth_time}
-- 성별: {gender}
-- 고민: {question}
+[손님 정보]
+이름: {name}
+생년월일: {birth}
+태어난 시간: {birth_time}
+성별: {gender}
+고민: {question}
+현재 달성한 운세 등급: {grade}
 
-규칙:
-- 반드시 오늘 하루 전체를 관통하는 기준 운세만 작성할 것.
-- 절대 '오전, 오후, 저녁, 아침, 밤' 등 시간대별 흐름을 나누어 설명하지 말 것.
-- 점수나 등급 보너스 내용은 포함 금지
-- 짧지만 성의 있게 작성
-- 고민에 대한 내용이 있으면 [도사의 조언]을 통해 집중적으로 풀어줄 것
-- 아래 형식만 정확히 따를 것
+────────────────────
 
-형식:
+[절대 규칙]
+1. 반드시 '오늘 하루 전체 운세'만 다룰 것. (❌ 오전/오후/저녁/시간대 구분 절대 금지)
+2. 문체는 처음부터 끝까지 '레트로 도사'의 일관된 말투를 유지할 것:
+   - "애햄!", "허허", "그르나", "조심하시게", "명심하거라" 등 사극풍/도사풍 어미 사용
+   - 현대적인 단어(스트레스, 멘탈, 투자 등)를 쓰더라도 어미는 반드시 도사 말투로 마무리할 것
+   - 절대 "~습니다", "~해요", "~입니다" 등의 평범한 존댓말을 쓰지 말 것
+3. 현실적인 공감 + 실제 도움이 되는 조언 필수
+4. 고민이 있다면 [도사의 조언]에서 핵심 해결 방향을 제시할 것
+5. 절대 등급을 호칭처럼 부르지 말 것 (❌ 우주신님, 태양신님 금지)
+6. 등급별 글자 수 및 문장 수 제한 (매우 엄격하게 지킬 것):
+   - 🌑 수행자: 각 항목당 딱 1문장. (가장 야박하고 짧게, 전체 150자 이내)
+   - 👣 평민: 각 항목당 1~2문장. (건조하고 짧게, 전체 250자 이내)
+   - 🏹 숙련자: 각 항목당 2문장. (평범하고 무난한 운세, 전체 350자 이내)
+   - 📜 현자: 각 항목당 2~3문장. (조금 더 신경 쓴 조언, 전체 450자 이내)
+   - ⚔️ 대장군: 각 항목당 3문장. (힘차고 구체적인 내용, 전체 600자 이내)
+   - 💎 보석왕: 각 항목당 3~4문장. (풍성하고 여유로운 조언, 전체 700자 이내)
+   - 👑 제왕: 각 항목당 4문장. (제왕의 격에 맞게 매우 상세하고 깊이 있게, 전체 900자 이내)
+   - 🌕 광명성: 각 항목당 4~5문장. (숨은 이치까지 통찰하는 긴 분량, 전체 1100자 이내)
+   - ☀️ 태양신: 각 항목당 5문장. (압도적인 분량과 긍정적인 기운, 전체 1300자 이내)
+   - 🌌 우주신: 각 항목당 5~6문장 이상. (도사가 해줄 수 있는 모든 말을 쏟아낼 것, 전체 2000자 이내로 가장 길게 작성)
+7. 반드시 아래 주어진 [출력 형식]의 헤딩(대괄호)들만 사용하여 그 안의 내용을 채울 것.
+
+────────────────────
+
+[출력 형식]
+
+애햄! {name} 손님 어서 오게나. 오늘의 천기를 읽어보니...
+
 [오늘의 총운]
+(전체 흐름 요약)
+
 [금전운]
+(돈 흐름 / 소비 / 기회)
+
 [인간관계운]
+(사람, 갈등, 기회)
+
 [건강운]
-[조심할 일]
+(컨디션, 주의점)
+
 [도사의 조언]
-
-첫 문장:
-"애햄! {name} 손님 어서 오게나. 오늘의 천기를 읽어보니..."
-"""
-    return call_gemini(prompt)
-
-
-def get_grade_bonus_rules(grade: str, secrets: int) -> str:
-    if grade in ["🌑 수행자", "👣 평민"]:
-        return "이 등급은 추가 해금 내용 없음."
-
-    if grade in ["🏹 숙련자", "📜 현자"]:
-        return f"""
-- 길이: 짧거나 중간
-- 현실적인 조언 중심
-- 반드시 비책 {secrets}개
-- 형식:
-[🔥 해금된 천기]
-[🔥 도사의 특별 비책]
+(고민 해결 중심, 현실적인 방향. 단, 고민이 없을시 오늘의 운세 기준으로 작성)
 """
 
-    if grade in ["⚔️ 대장군", "💎 보석왕", "👑 제왕", "🌕 광명성"]:
-        return f"""
-- 길이: 중간 이상
-- 오늘의 기회/주의점이 선명해야 함
-- 반드시 비책 {secrets}개
-- 형식:
+    if grade not in ["🌑 수행자", "👣 평민", "🏹 숙련자", "📜 현자"]:
+        prompt += f"""
 [🔥 해금된 천기]
+(오늘 숨겨진 핵심 흐름)
+"""
+
+    if grade in ["👑 제왕", "🌕 광명성", "☀️ 태양신", "🌌 우주신"]:
+        prompt += """
 [🔥 오늘 잡아야 할 기회]
-[🔥 오늘 피해야 할 선택]
-[🔥 도사의 특별 비책]
+(구체적인 행동)
 """
 
-    return f"""
-- 길이: 풍부하고 확실하게
-- 최상위 등급답게 더 선명하고 구체적이어야 함
-- 반드시 비책 {secrets}개
-- 형식:
-[🔥 해금된 천기]
-[🔥 오늘 가장 강한 행운 포인트]
+    if grade in ["🌕 광명성", "☀️ 태양신", "🌌 우주신"]:
+        prompt += """
 [🔥 오늘 반드시 피해야 할 함정]
+(실수 방지 포인트)
+"""
+
+    if secrets > 0:
+        secret_format = "\n".join([f"{i+1}. (비책 내용)" for i in range(secrets)])
+        prompt += f"""
 [🔥 도사의 특별 비책]
+{secret_format}
+(※ 경고: 비책은 반드시 위 번호에 맞춰 정확히 {secrets}개만 작성할 것. 절대 추가하지 말 것.)
 """
 
-
-def generate_grade_bonus(name, grade, secrets, question, today_display):
-    rules = get_grade_bonus_rules(grade, secrets)
-
-    if grade in ["🌑 수행자", "👣 평민"]:
-        return ""
-
-    prompt = f"""
-너는 천기를 읽는 AI 레트로 도사다.
-오늘은 {today_display}.
-
-손님 이름: {name}
-현재 등급: {grade}
-오늘의 고민: {question}
-
-규칙:
-- 기본 운세를 반복하지 말 것.
-- 여기서도 '오전/오후/저녁' 등 시간대를 나누는 행위는 절대 금지함.
-- 오직 추가 해금 내용만 작성.
-- 오늘 하루 기준으로만 작성.
-- 오직 추가로 해금된 깊은 정보와 구체적인 행동 지침만 작성할 것.
-- 아래 규칙을 반드시 따를 것.
-
-{rules}
+    if next_grade_info:
+        prompt += f"""
+[마무리 인사]
+(반드시 마지막 줄에는 "자네가 복채를 조금만 더 모아 [{next_grade_info}] 등급이 되었더라면 더 높은 천기를 알려주었을 텐데 참으로 아쉽구려!"라는 뉘앙스로 아쉬움을 남기며 유혹할 것.)
 """
+
     return call_gemini(prompt)
-
-
-def build_final_fortune(base_fortune: str, bonuses: dict, current_grade: str, next_grade_info: str | None):
-    final_parts = [base_fortune]
-
-    # 🌟 수정된 부분: for문으로 과거 등급을 전부 누적하던 코드를 삭제하고,
-    # 오직 '현재 달성한 최고 등급(current_grade)'의 비책 딱 1개만 가져오도록 변경합니다!
-    if current_grade != "🌑 수행자":
-        bonus_text = bonuses.get(current_grade, "").strip()
-        if bonus_text:
-            final_parts.append(bonus_text)
-
-    if next_grade_info is not None:
-        final_parts.append(
-            f"자네의 복채 점수가 조금만 더 높아 [{next_grade_info}] 등급이었더라면,\n"
-            f"내 더 깊은 천기누설을 내려주었을 텐데 참으로 아쉽구나."
-        )
-
-    return "\n\n".join(final_parts)
 
 @app.route('/')
 def index():
-    # 화면을 그리는 대신, 서버가 살아있다는 신호만 보냅니다.
     return jsonify({
         "status": "online",
         "message": "레트로 도사 API 서버가 정상 동작 중입니다!",
@@ -337,26 +224,18 @@ def index():
 def get_fortune():
     global ip_request_counts
     
-    # 🌟 [개선] 보따리(JSON)를 먼저 풀어 익명 키를 찾습니다.
     data = request.get_json(silent=True) or {}
     anon_key = data.get('anonymous_key')
-    
-    # 🌟 [개선] 사용자의 실제 IP 추출 (예비용)
     user_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0]
-    
-    # 🌟 [핵심] 익명 키가 있으면 그걸 신분증으로 쓰고, 없으면 IP를 씁니다.
     user_id = anon_key if anon_key else user_ip
     
     today_key = datetime.now().strftime("%Y-%m-%d")
     
-    # 해당 사용자(user_id)의 오늘 기록 확인 및 초기화
-    # (변수명은 ip_request_counts지만 실제로는 익명 키를 우선 담게 되오)
     user_record = ip_request_counts[user_id]
     if user_record["date"] != today_key:
         user_record["count"] = 0
         user_record["date"] = today_key
 
-    # 10회 초과 시 즉시 반환 (익명 키 기준이라 아주 정확하오!)
     if user_record["count"] >= 10:
         return jsonify({
             "fortune": "🏮 도사님의 경고: '이미 하루의 천기를 똥꼬까지 다 보았네! 내일 다시 오시게.'",
@@ -365,7 +244,6 @@ def get_fortune():
         }), 429
     
     try:
-        # 이미 위에서 data를 가져왔으니 다시 가져올 필요 없소.
         name = data.get('name', '익명')[:10]
         birth = data.get('birth', '알 수 없음')[:8]
         birth_time = data.get('birth_time', '모름')[:20]
@@ -373,7 +251,7 @@ def get_fortune():
         score = int(data.get('total_score', 0))
         user_question = data.get('question', '오늘의 전반적인 운세')[:80]
 
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧧 {name}({gender}/{birth}) | 점수: {score} | 고민: {user_question} | ID: {user_id[:10]}...")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧧 {name} | 점수: {score} | 고민: {user_question} | ID: {user_id[:10]}...")
 
         today_display = datetime.now().strftime("%Y년 %m월 %d일")
 
@@ -384,47 +262,20 @@ def get_fortune():
         next_grade_info = grade_info["next_grade_info"]
 
         fortune_key = make_daily_fortune_key(
-            name=name,
-            birth=birth,
-            birth_time=birth_time,
-            gender=gender,
-            question=user_question,
-            today_key=today_key
+            name=name, birth=birth, birth_time=birth_time, 
+            gender=gender, question=user_question, grade=grade, today_key=today_key
         )
 
         if fortune_key not in fortune_cache:
-            fortune_cache[fortune_key] = {
-                "base_fortune": generate_base_fortune(
-                    name=name,
-                    birth=birth,
-                    birth_time=birth_time,
-                    gender=gender,
-                    question=user_question,
-                    today_display=today_display
-                ),
-                "bonuses": {}
-            }
-            save_cache(fortune_cache)
-
-        if grade not in fortune_cache[fortune_key]["bonuses"]:
-            bonus_text = generate_grade_bonus(
-                name=name,
-                grade=grade,
-                secrets=secrets,
-                question=user_question,
-                today_display=today_display
+            fortune_cache[fortune_key] = generate_full_fortune(
+                name=name, birth=birth, birth_time=birth_time, 
+                gender=gender, question=user_question, grade=grade, 
+                secrets=secrets, today_display=today_display, next_grade_info=next_grade_info
             )
-            fortune_cache[fortune_key]["bonuses"][grade] = bonus_text
             save_cache(fortune_cache)
 
-        final_fortune = build_final_fortune(
-            base_fortune=fortune_cache[fortune_key]["base_fortune"],
-            bonuses=fortune_cache[fortune_key]["bonuses"],
-            current_grade=grade,
-            next_grade_info=next_grade_info
-        )
+        final_fortune = fortune_cache[fortune_key]
         
-        # 🌟 마지막에 카운트를 올립니다.
         user_record["count"] += 1
 
         return jsonify({
@@ -444,55 +295,19 @@ def get_fortune():
 
 @app.route('/toss-api-call')
 def call_toss():
-    cert = get_toss_cert()
-    # 실제 토스에서 요구하는 API 주소 (문서 확인 후 변경)
+    cert = TOSS_CERTS
     url = "https://apps-in-toss-api.toss.im/v1/user-identity" 
     
     try:
-        # cert 인자에 아까 만든 파일 경로를 넣어 신분증을 제시합니다.
         response = requests.post(url, cert=cert, json={"some": "data"})
         return response.json()
     except Exception as e:
-        # 에러 발생 시 도사님께 보고합니다.
         return jsonify({"error": str(e)}), 500
-
-@app.route('/story.html')
-def story():
-    return render_template('story.html') # templates 폴더 안에 파일이 있을 경우
-
-@app.route('/history.html')
-def history():
-    return render_template('history.html') # templates 폴더 안에 파일이 있을 경우
-
-@app.route('/history_2.html')
-def history_2():
-    return render_template('history_2.html') # templates 폴더 안에 파일이 있을 경우
-
-@app.route('/history_3.html')
-def history_3():
-    return render_template('history_3.html') # templates 폴더 안에 파일이 있을 경우
-
-@app.route('/biz.html')
-def biz():
-    return render_template('biz.html') # templates 폴더 안에 파일이 있을 경우
-
-@app.route('/privacy')
-def privacy():
-    return render_template('privacy.html')
-
-@app.route('/terms')
-def terms():
-    return render_template('terms.html')
-
-@app.route('/contact')
-def contact():
-    return render_template('contact.html')
 
 @app.route('/robots.txt')
 @app.route('/sitemap.xml')
 @app.route('/ads.txt')
 def static_from_root():
-    # static 폴더 안에 있는 robots.txt 파일을 루트 경로(/)에서 보여줌
     return send_from_directory(app.static_folder, request.path[1:])
 
 if __name__ == '__main__':
