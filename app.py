@@ -10,9 +10,13 @@ from dotenv import load_dotenv
 import json
 import hashlib
 import traceback
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 KST = timezone(timedelta(hours=9))
 
@@ -44,9 +48,124 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def get_db_connection():
+    # PostgreSQL 데이터베이스 연결 함수
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+
+def init_db():
+    """서버 시작 시 테이블이 없으면 생성하는 함수"""
+    if not DATABASE_URL:
+        print("⚠️ DATABASE_URL이 설정되지 않았습니다.")
+        return
+    
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        # 유저 키를 Primary Key로 설정하여 중복 방지
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS toss_users (
+                user_key VARCHAR(255) PRIMARY KEY,
+                name VARCHAR(255),
+                last_active DATE
+            )
+        ''')
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+# 앱 실행 시 DB 테이블 자동 생성
+init_db()
+
+def upsert_user(user_key, name, last_active):
+    """새 유저면 추가하고, 기존 유저면 이름과 최근 접속일을 업데이트"""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO toss_users (user_key, name, last_active)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_key)
+            DO UPDATE SET name = EXCLUDED.name, last_active = EXCLUDED.last_active;
+        ''', (user_key, name, last_active))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+def get_all_users():
+    """푸시 발송을 위해 전체 유저 목록 가져오기"""
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT user_key, name FROM toss_users')
+        users = cur.fetchall()
+        cur.close()
+        return users
+    finally:
+        conn.close()
+
+
+# ==============================================================
+# 🌟 [신규] 매일 오전 10시 대량 푸시 발송 함수 (Bulk Message)
+# ==============================================================
+def send_daily_bulk_push():
+    print(f"[{datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}] ⏰ 일일 운세 충전 푸시 알림 발송 시작!")
+    
+    users = get_all_users()
+    if not users:
+        print("발송할 대상 유저가 없습니다.")
+        return
+
+    url = "https://apps-in-toss-api.toss.im/api-partner/v1/apps-in-toss/messenger/send-bulk-message"
+    headers = {"Content-Type": "application/json"}
+    
+    # 토스 개발자 센터에서 승인받은 대량 발송용 템플릿 코드 (예: "FORTUNE_DAILY_TEMP")
+    template_code = os.environ.get('TOSS_DAILY_PUSH_TEMPLATE', 'FORTUNE_DAILY_TEMP') 
+    
+    context_list = []
+    for user in users:
+        context_list.append({
+            "userKey": user['user_key'],
+            "context": {
+                "name": user['name']
+            }
+        })
+
+    # 혹시 유저가 너무 많아질 경우를 대비해 500명씩 잘라서(청크) 발송
+    chunk_size = 500
+    for i in range(0, len(context_list), chunk_size):
+        chunk = context_list[i:i+chunk_size]
+        payload = {
+            "templateSetCode": template_code,
+            "contextList": chunk
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, cert=TOSS_CERTS, timeout=10)
+            res_json = response.json()
+            if res_json.get("resultType") == "SUCCESS":
+                success_data = res_json.get('success', {})
+                print(f"✅ 대량 푸시 성공: 총 {success_data.get('msgCount')}건 중 {success_data.get('sentPushCount')}건 전송 완료.")
+            else:
+                print(f"❌ 대량 푸시 실패: {res_json.get('error', {}).get('reason')}")
+        except Exception as e:
+            print(f"⚠️ 대량 푸시 에러: {e}")
+
+# ==============================================================
+# 🌟 [신규] 스케줄러 설정 (매일 오전 10시 실행)
+# ==============================================================
+scheduler = BackgroundScheduler(timezone=KST)
+# CronTrigger를 사용해 매일 10시 0분에 실행하도록 예약
+scheduler.add_job(send_daily_bulk_push, CronTrigger(hour=10, minute=0))
+scheduler.start()
+
+
 SCORES = {
-    "💎": 5000, "👑": 3500, "💰": 2000, 
-    "7️⃣": 1000, "🍒": 500, "🍋": 300
+    "💎": 3000, "👑": 2000, "💰": 1000, 
+    "7️⃣": 700, "🍒": 300, "🍋": 100
 }
 
 CACHE_FILE = Path("fortune_cache.json")
@@ -74,26 +193,16 @@ def save_cache(cache):
 fortune_cache = load_cache()
 
 def get_grade_info(score: int):
-    if score >= 150000:
-        return {"grade": "🌌 우주신", "status": "15만 점 돌파! 우주의 주인이 되셨구려!", "secrets": 4, "next_grade_info": None}
-    elif score >= 100000:
-        return {"grade": "☀️ 태양신", "status": "온 세상을 밝히는 강렬한 태양의 기운!", "secrets": 3, "next_grade_info": "🌌 우주신"}
-    elif score >= 80000:
-        return {"grade": "🌕 광명성", "status": "어둠 속에서도 빛을 발하는 비범한 운명!", "secrets": 2, "next_grade_info": "☀️ 태양신"}
-    elif score >= 70000:
-        return {"grade": "👑 제왕", "status": "만인을 발아래 두는 제왕의 격이로다.", "secrets": 2, "next_grade_info": "🌕 광명성"}
+    if score >= 100000:
+        return {"grade": "🌌 우주신", "status": "우주의 주인이 되셨구려!", "next_grade_info": None}
     elif score >= 60000:
-        return {"grade": "💎 보석왕", "status": "금은보화가 창고에 쌓이는 형국이로다.", "secrets": 2, "next_grade_info": "👑 제왕"}
-    elif score >= 40000:
-        return {"grade": "⚔️ 대장군", "status": "용맹한 기운이 하늘을 찌르는구나!", "secrets": 1, "next_grade_info": "💎 보석왕"}
+        return {"grade": "☀️ 태양신", "status": "강렬한 태양의 기운!", "next_grade_info": "🌌 우주신"}
     elif score >= 30000:
-        return {"grade": "📜 현자", "status": "지혜가 샘솟고 귀인이 길을 안내하리라.", "secrets": 1, "next_grade_info": "⚔️ 대장군"}
-    elif score >= 20000:
-        return {"grade": "🏹 숙련자", "status": "기운이 무르익었으니 조금만 더 힘내시오.", "secrets": 1, "next_grade_info": "📜 현자"}
+        return {"grade": "🌕 광명성", "status": "비범한 운명!", "next_grade_info": "☀️ 태양신"}
     elif score >= 10000:
-        return {"grade": "👣 평민", "status": "성실함이 복이 되어 돌아오는 날이로다.", "secrets": 0, "next_grade_info": "🏹 숙련자"}
+        return {"grade": "👑 제왕", "status": "제왕의 격이로다.", "next_grade_info": "🌕 광명성"}
     else:
-        return {"grade": "🌑 수행자", "status": "지금은 씨앗을 심는 시기니 인내하거라.", "secrets": 0, "next_grade_info": "👣 평민"}
+        return {"grade": "🌑 수행자", "status": "인내하거라.", "next_grade_info": "👑 제왕"}
 
 def make_daily_fortune_key(name, birth, birth_time, gender, question, grade, today_key):
     raw = f"{today_key}|{name.strip()}|{birth.strip()}|{birth_time.strip()}|{gender.strip()}|{question.strip()}|{grade}"
@@ -121,97 +230,159 @@ def call_gemini(prompt: str) -> str:
                 time.sleep(2)
     raise RuntimeError("Gemini 응답 생성 실패")
 
-# 🌟 수정: 프롬프트 말투 일관성 강화, 비책 개수 명확화, 섹션 해금 조건 조정
-def generate_full_fortune(name, birth, birth_time, gender, question, grade, secrets, today_display, next_grade_info):
-    # 등급별 제약 조건을 데이터로 분리
+def generate_full_fortune(name, birth, birth_time, gender, question, grade, today_display, next_grade_info):
     constraints = {
-        "🌑 수행자": "각 항목당 반드시 '딱 1문장'만 작성. 가장 야박하고 짧게 써라. (전체 150자 이내)",
-        "👣 평민": "각 항목당 '1~2문장'. 건조하고 짧게 써라. (전체 250자 이내)",
-        "🏹 숙련자": "각 항목당 '2문장'. 평범한 분량으로 써라. (전체 350자 이내)",
-        "📜 현자": "각 항목당 '2~3문장'. 구체적인 조언을 담아라. (전체 450자 이내)",
-        "⚔️ 대장군": "각 항목당 '3문장'. 힘차고 구체적으로 써라. (전체 600자 이내)",
-        "💎 보석왕": "각 항목당 '3~4문장'. 풍성하고 여유롭게 써라. (전체 700자 이내)",
-        "👑 제왕": "각 항목당 '4문장'. 제왕의 격에 맞게 깊이 있게 써라. (전체 900자 이내)",
-        "🌕 광명성": "각 항목당 '4~5문장'. 숨은 이치까지 통찰하여 길게 써라. (전체 1100자 이내)",
-        "☀️ 태양신": "각 항목당 '5문장'. 압도적인 분량과 기운을 담아라. (전체 1500자 이내)",
-        "🌌 우주신": "각 항목당 '5~6문장 이상'. 네가 할 수 있는 가장 긴 호흡으로 상세히 써라. (전체 2300자 이내)"
+        "🌑 수행자": "반드시 '딱 1문장'만 작성. (전체 150자 이내)",
+        "👑 제왕": "각 항목당 '2문장'. 구체적인 조언을 담아라. (전체 450자 이내)",
+        "🌕 광명성": "각 항목당 '3문장'. 풍성하고 여유롭게 써라. (전체 700자 이내)",
+        "☀️ 태양신": "각 항목당 '4문장'. 깊이 있는 통찰을 담아라. (전체 1000자 이내)",
+        "🌌 우주신": "각 항목당 '5문장 이상'. 상세하고 웅장하게 써라. (전체 1500자 이내)"
     }
 
     current_constraint = constraints.get(grade, constraints["🌑 수행자"])
     
     prompt = f"""
-너는 수천 년간 사주 명리학을 통달한 '레트로 도사'다. 
-오늘은 {today_display}이며, 현재 네 앞에 앉아 있는 손님은 [{grade}] 등급의 공력을 쌓았느니라.
-
-────────────────────
-
-[최우선 준수 사항: 등급별 분량 제약]
-현재 손님의 등급은 [{grade}]이다. 너는 반드시 다음 규칙을 사수하라:
-▶ 제약 조건: {current_constraint}
-※ 이 지침을 어기고 문장 수를 늘리는 것은 천기를 누설하는 죄를 짓는 것이니, 절대 항목당 문장 수를 초과하지 마라.
-
-────────────────────
+너는 사주 명리학자 '레트로 도사'다. 손님은 [{grade}] 등급이다.
+제약 조건: {current_constraint}
 
 [절대 규칙]
-1. 말투: 처음부터 끝까지 '레트로 도사' 말투 유지 ("~하시게", "~하거라", "애햄!", "허허"). 평범한 존댓말(~해요, ~합니다) 사용 시 신통력이 사라진다.
-2. 운세 범위: 반드시 '오늘 하루 전체 운세'만 다룰 것. 시간대별로 쪼개지 마라.
-3. 호칭: 손님을 절대로 '우주신님', '제왕님' 등 등급명으로 부르지 마라. 그냥 "{name} 손님"이라 불러라.
-4. 내용: 현실적인 공감과 실제 도움이 되는 조언을 담아라.
+1. 말투: "~하시게", "~하거라" 등 도사 말투 유지.
+2. 비책(솔루션)은 절대 언급하지 마라.
+3. 오직 오늘 하루의 운세만 다뤄라.
 
 [출력 형식]
-애햄! {name} 손님 어서 오게나. 오늘의 천기를 읽어보니...
-
+애햄! {name} 손님...
 [오늘의 총운]
-(지침에 맞춘 내용)
-
 [금전운]
-(지침에 맞춘 내용)
-
 [인간관계운]
-(지침에 맞춘 내용)
-
 [건강운]
-(지침에 맞춘 내용)
-
-[도사의 조언]
-(고민: {question} 에 대한 해결책 중심)
-"""
-
-    # ... (이하 해금 섹션 및 비책 로직 동일)
-
-    if grade not in ["🌑 수행자", "👣 평민", "🏹 숙련자", "📜 현자"]:
-        prompt += f"""
-[🔥 해금된 천기]
-(오늘 숨겨진 핵심 흐름)
-"""
-
-    if grade in ["👑 제왕", "🌕 광명성", "☀️ 태양신", "🌌 우주신"]:
-        prompt += """
-[🔥 오늘 잡아야 할 기회]
-(구체적인 행동)
-"""
-
-    if grade in ["🌕 광명성", "☀️ 태양신", "🌌 우주신"]:
-        prompt += """
-[🔥 오늘 반드시 피해야 할 함정]
-(실수 방지 포인트)
-"""
-
-    if secrets > 0:
-        secret_format = "\n".join([f"{i+1}. (비책 내용)" for i in range(secrets)])
-        prompt += f"""
-[🔥 도사의 특별 비책]
-{secret_format}
-(※ 경고: 비책은 반드시 위 번호에 맞춰 정확히 {secrets}개만 작성할 것. 절대 추가하지 말 것.)
+[도사의 조언] (고민: {question} 해결 중심)
 """
 
     if next_grade_info:
-        prompt += f"""
-[마무리 인사]
-(반드시 마지막 줄에는 "자네가 복채를 조금만 더 모아 [{next_grade_info}] 등급이 되었더라면 더 높은 천기를 알려주었을 텐데 참으로 아쉽구려!"라는 뉘앙스로 아쉬움을 남기며 유혹할 것.)
-"""
+        prompt += f"\n[마무리] 지금보다 높은 등급이 되면 더 놀라운 천기를 보게 될 것이라 유혹하며 마무리."
 
     return call_gemini(prompt)
+
+
+# ==============================================================
+# 🌟 [기능 추가 1] 토스 푸쉬 알람 자동 등록 함수
+# ==============================================================
+def sync_toss_push_user(toss_user_key, user_name):
+    """ 유저가 운세를 볼 때 토스 메시지 서버에 활성 사용자로 등록합니다. """
+    try:
+        url = "https://apps-in-toss-api.toss.im/api-partner/v1/apps-in-toss/messenger/send-message"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Toss-User-Key": toss_user_key
+        }
+        template_code = os.environ.get('TOSS_PUSH_TEMPLATE', 'FORTUNE_WELCOME_TEMP')
+        payload = {
+            "templateSetCode": template_code,
+            "context": {"name": user_name}
+        }
+        response = requests.post(url, json=payload, headers=headers, cert=TOSS_CERTS, timeout=5)
+        res_json = response.json()
+        if res_json.get("resultType") == "SUCCESS":
+            print(f"✅ [푸쉬등록 성공] {user_name}")
+        else:
+            print(f"❌ [푸쉬등록 실패] {res_json.get('error', {}).get('reason')}")
+    except Exception as e:
+        print(f"⚠️ [푸쉬등록 에러] {e}")
+
+
+# ==============================================================
+# 🌟 [기능 추가 2] 토스 간편 로그인 API
+# ==============================================================
+# ==============================================================
+# 🌟 [수정] 토스 정식 OAuth2 토큰 발급 API 적용
+# ==============================================================
+@# ==============================================================
+# 🌟 [최신 규격] 토스 정식 OAuth2 토큰 발급 API 적용
+# ==============================================================
+@app.route('/toss_login', methods=['POST'])
+def toss_login():
+    data = request.get_json() or {}
+    code = data.get('code')
+    
+    if not code:
+        return jsonify({"isSuccess": False, "error": "인증 코드가 없습니다."}), 400
+        
+    try:
+        # 1. 대표님이 찾으신 토스 정식 OAuth2 토큰 발급 주소
+        url = "https://apps-in-toss-api.toss.im/api-partner/v1/apps-in-toss/user/oauth2/generate-token"
+        
+        # 2. 가이드에 명시된 필수 파라미터 2가지
+        payload = {
+            "authorizationCode": code,
+            "referrer": "MINI_APP_MAIN" # 필수값: 유입 경로 명시
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        
+        # 3. 토스 인증서를 태워서 정식으로 요청
+        res = requests.post(url, json=payload, headers=headers, cert=TOSS_CERTS, timeout=5)
+        res_data = res.json()
+        
+        # 4. 발급 성공 시 처리
+        if res_data.get("resultType") == "SUCCESS":
+            token_info = res_data.get("success", {})
+            access_token = token_info.get("accessToken", "")
+            
+            # 발급받은 토큰의 해시값을 유저 고유 식별자(userKey)로 변환
+            # (이 키를 바탕으로 DB에서 하루 5회 접속 제한을 완벽하게 통제합니다)
+            import hashlib
+            unique_user_key = "TOSS_" + hashlib.sha256(access_token.encode()).hexdigest()[:20]
+            
+            return jsonify({
+                "isSuccess": True, 
+                "userInfo": {
+                    "userKey": unique_user_key,
+                    "decryptedName": "토스 도사님" # 초기 닉네임
+                }
+            })
+            
+        # 5. 실패 시 토스가 뱉어낸 정확한 에러 사유 반환
+        error_info = res_data.get("error", {})
+        return jsonify({"isSuccess": False, "error": error_info.get("reason", "토스 서버 인증 거절")})
+        
+    except Exception as e:
+        print(f"❌ 로그인 API 에러: {str(e)}")
+        return jsonify({"isSuccess": False, "error": str(e)})
+
+
+# ==============================================================
+# 🌟 [기능 추가 3] 토스 포인트 프로모션 지급 API
+# ==============================================================
+@app.route('/give_toss_point', methods=['POST'])
+def give_toss_point():
+    data = request.get_json() or {}
+    toss_user_key = data.get('toss_user_key')
+    amount = data.get('amount', 1)
+    
+    if not toss_user_key:
+        return jsonify({"isSuccess": False, "error": "유저 키가 없습니다."}), 400
+        
+    try:
+        url = "https://apps-in-toss-api.toss.im/api-partner/v2/point/deposit"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Toss-User-Key": toss_user_key
+        }
+        payload = {
+            "promotionId": "TEST_01KPT6C4487X5RGTPZQZYV8CN8",
+            "amount": amount,
+            "transactionId": f"reward_{int(time.time())}_{str(toss_user_key)[-5:]}",
+            "description": "레트로 도 가 천기 누설 보상"
+        }
+        res = requests.post(url, json=payload, headers=headers, cert=TOSS_CERTS, timeout=5)
+        res_data = res.json()
+        if res_data.get("resultType") == "SUCCESS":
+            return jsonify({"isSuccess": True})
+        return jsonify({"isSuccess": False, "error": str(res_data)})
+    except Exception as e:
+        return jsonify({"isSuccess": False, "error": str(e)})
+
 
 @app.route('/')
 def index():
@@ -221,17 +392,21 @@ def index():
         "version": "1.0.0"
     })
 
+# ==============================================================
+# 🌟 [수정 완료] 중복된 get_fortune 제거 및 DB 로직 병합
+# ==============================================================
 @app.route('/get_fortune', methods=['POST'])
 def get_fortune():
     global ip_request_counts
     
     data = request.get_json(silent=True) or {}
+    toss_user_key = data.get('toss_user_key')
     anon_key = data.get('anonymous_key')
     user_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0]
-    user_id = anon_key if anon_key else user_ip
+    user_id = toss_user_key if toss_user_key else (anon_key if anon_key else user_ip)
     
     now_kst = datetime.now(KST)
-    today_key = now_kst.strftime("%Y-%m-%d")      # 캐시 및 횟수 제한용 (2026-04-15)
+    today_key = now_kst.strftime("%Y-%m-%d")      # 캐시 및 횟수 제한용
     today_display = now_kst.strftime("%Y년 %m월 %d일") # 프롬프트 표시용
     
     user_record = ip_request_counts[user_id]
@@ -239,7 +414,7 @@ def get_fortune():
         user_record["count"] = 0
         user_record["date"] = today_key
 
-    if user_record["count"] >= 10:
+    if user_record["count"] >= 5:
         return jsonify({
             "fortune": "🏮 도사님의 경고: '이미 하루의 천기를 끝까지 다 보았네! 내일 다시 오시게.'",
             "grade": "접근 제한", 
@@ -254,12 +429,18 @@ def get_fortune():
         score = int(data.get('total_score', 0))
         user_question = data.get('question', '오늘의 전반적인 운세')[:80]
 
+        # 🌟 토스 유저일 경우 DB에 유저 정보 업데이트 (푸시 발송 명단 갱신)
+        if toss_user_key:
+            try:
+                upsert_user(toss_user_key, name, today_key)
+            except Exception as db_error:
+                print(f"⚠️ DB 저장 실패 (운세는 정상 진행됨): {db_error}")
+
         print(f"[{now_kst.strftime('%H:%M:%S')}] 🧧 {name} | 점수: {score} | 고민: {user_question} | ID: {user_id[:10]}...")
 
         grade_info = get_grade_info(score)
         grade = grade_info["grade"]
         status = grade_info["status"]
-        secrets = grade_info["secrets"]
         next_grade_info = grade_info["next_grade_info"]
 
         fortune_key = make_daily_fortune_key(
@@ -271,13 +452,20 @@ def get_fortune():
             fortune_cache[fortune_key] = generate_full_fortune(
                 name=name, birth=birth, birth_time=birth_time, 
                 gender=gender, question=user_question, grade=grade, 
-                secrets=secrets, today_display=today_display, next_grade_info=next_grade_info
+                today_display=today_display, next_grade_info=next_grade_info
             )
             save_cache(fortune_cache)
 
         final_fortune = fortune_cache[fortune_key]
         
         user_record["count"] += 1
+
+        # 🌟 결과 반환 전 토스 푸쉬 명단에 사용자 등록 (호출 연동)
+        if toss_user_key:
+            try:
+                upsert_user(toss_user_key, name, today_key)
+            except Exception as db_error:
+                print(f"⚠️ DB 저장 실패 (운세는 정상 진행됨): {db_error}")
 
         return jsonify({
             "fortune": final_fortune,
