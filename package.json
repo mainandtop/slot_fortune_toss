@@ -1,7 +1,7 @@
 {
   "name": "my-toss-app",
   "private": true,
-  "version": "0.0.3",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -11,6 +11,7 @@
     "deploy": "ait deploy --api-key ts_h0vimA31XgnB4Juf-sn7KuL5K2S6eOam-FwXdS_MUco"
   },
   "dependencies": {
+    "@apps-in-toss/web-framework": "^2.4.7",
     "@toss/tds-mobile-ait": "^2.3.0",
     "html2canvas": "^1.4.1",
     "react": "^18.3.1",
